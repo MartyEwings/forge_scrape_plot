@@ -1,0 +1,12 @@
+
+   
+#!/bin/bash
+
+for module in <%= forge_scrape_plot::scrape::modules %>
+
+do
+	
+echo $(date)","$(curl -s https://forgeapi.puppet.com/v3/releases?module=$module | grep  "downloads"  | awk '/version/ { printf("%s\t", $0); next } 1' |  sed 's/[^0-9]*//g'  | awk '{s+=$1} END {print s}') >> /home/centos/$module.csv
+
+done
+
