@@ -2,7 +2,7 @@
    
 #!/bin/bash
 
-for module in <%= forge_scrape_plot::scrape::modules %>
+for module in <%= $forge_scrape_plot::scrape::modules %>
 
 do
 	
