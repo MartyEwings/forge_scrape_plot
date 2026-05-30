@@ -2,22 +2,61 @@
 #!/bin/bash
 # Managed by Puppet (forge_scrape_plot::scrape) - do not edit.
 #
-# For each module, fetch its total download count from the Puppet Forge API
-# and append "<date>,<downloads>" to <scrape_dir>/<module>.csv.
+# For each configured module, fetch the per-release download counts from the
+# Puppet Forge API and append one row per version to <scrape_dir>/<module>.csv:
+#
+#   date,module,version,downloads,delta
+#
+# - downloads is the Forge cumulative counter for that release.
+# - delta is the change since the previous recorded sample for that version
+#   (empty on the first observation).
+# - Collection is idempotent per day: if the module was already collected
+#   today the module is skipped, so re-runs don't create duplicate rows.
 
-set -euo pipefail
+set -uo pipefail
 
-scrape_dir="<%= $scrape_dir %>"
-mkdir -p "${scrape_dir}"
+API="https://forgeapi.puppet.com"
+SCRAPE_DIR="<%= $scrape_dir %>"
+TODAY="$(date -u +%F)"
+HEADER="date,module,version,downloads,delta"
 
-modules=(<% $modules.each |$m| { -%>
+modules=(
+<% $modules.each |$m| { -%>
   "<%= $m %>"
 <% } -%>
 )
 
+mkdir -p "${SCRAPE_DIR}"
+
 for module in "${modules[@]}"; do
-  downloads=$(curl -fsS "https://forgeapi.puppet.com/v3/modules/${module}" \
-    | grep -m1 '"downloads"' \
-    | grep -oE '[0-9]+')
-  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ),${downloads:-0}" >> "${scrape_dir}/${module}.csv"
+  csv="${SCRAPE_DIR}/${module}.csv"
+  [[ -f "${csv}" ]] || echo "${HEADER}" > "${csv}"
+
+  # Idempotent: skip if the most recent data row is already from today.
+  if [[ "$(tail -n +2 "${csv}" | tail -n1 | cut -d, -f1)" == "${TODAY}" ]]; then
+    continue
+  fi
+
+  # Walk the (paginated) releases list. limit caps at 100/page on the Forge API.
+  next="/v3/releases?module=${module}&limit=100&exclude_fields=readme,changelog,license,reference,metadata,tasks,plans"
+  while [[ -n "${next}" && "${next}" != "null" ]]; do
+    if ! resp="$(curl -fsS "${API}${next}")"; then
+      echo "forge_scrape: failed to fetch ${module}, skipping" >&2
+      continue 2
+    fi
+
+    while IFS=$'\t' read -r version downloads; do
+      # Previous sample for this version: last matching row (comma-anchored so
+      # the version field matches exactly). Empty on first observation.
+      prev="$(grep -F ",${module},${version}," "${csv}" | tail -n1 | cut -d, -f4)"
+      if [[ -n "${prev}" ]]; then
+        delta=$(( downloads - prev ))
+      else
+        delta=""
+      fi
+      echo "${TODAY},${module},${version},${downloads},${delta}" >> "${csv}"
+    done < <(echo "${resp}" | jq -r '.results[] | select(.downloads != null) | [.version, .downloads] | @tsv')
+
+    next="$(echo "${resp}" | jq -r '.pagination.next // "null"')"
+  done
 done

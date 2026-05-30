@@ -1,9 +1,12 @@
 # @summary Scrapes Puppet Forge download counts for a set of modules.
 #
 # Installs a small shell script that polls the Puppet Forge API for the
-# total download count of each configured module and appends a timestamped
-# row to a per-module CSV. A cron job runs the script on a schedule so the
-# CSVs build up a download history over time.
+# per-release download counts of each configured module and appends one row
+# per version to a per-module CSV (date,module,version,downloads,delta). A
+# cron job runs the script on a schedule so the CSVs build up a download
+# history over time, with a day-over-day delta computed per version.
+#
+# Requires `jq` (managed by this class) and `curl` (assumed present).
 #
 # @param modules
 #   Forge module slugs (`owner-name`) to track.
@@ -28,6 +31,13 @@ class forge_scrape_plot::scrape (
   $script = '/usr/local/bin/forge_plot.sh'
   $cron_ensure = $plot ? { true => 'file', default => 'absent' }
 
+  # The collector parses the Forge API JSON with jq. curl is assumed present
+  # (it is on every supported platform, and on RHEL the base curl-minimal
+  # package satisfies it without conflicting).
+  package { 'jq':
+    ensure => installed,
+  }
+
   file { $scrape_dir:
     ensure => directory,
     mode   => '0755',
@@ -48,6 +58,6 @@ class forge_scrape_plot::scrape (
     ensure  => $cron_ensure,
     mode    => '0644',
     content => "# Managed by Puppet (forge_scrape_plot::scrape)\n0 0 * * * root ${script}\n",
-    require => File[$script],
+    require => [File[$script], Package['jq']],
   }
 }

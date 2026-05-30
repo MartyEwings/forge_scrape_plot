@@ -1,6 +1,6 @@
 {
   "name": "martyewings-forge_scrape_plot",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "Marty Ewings",
   "summary": "Scrapes Puppet Forge module download counts to per-module CSV history files.",
   "license": "Apache-2.0",
