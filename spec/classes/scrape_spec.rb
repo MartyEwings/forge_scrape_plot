@@ -11,11 +11,16 @@ describe 'forge_scrape_plot::scrape' do
 
       it { is_expected.to contain_file('/var/log/forge_scrape').with_ensure('directory') }
 
+      it { is_expected.to contain_package('jq').with_ensure('installed') }
+
       it 'installs the executable scrape script' do
         is_expected.to contain_file('/usr/local/bin/forge_plot.sh')
           .with_ensure('file')
           .with_mode('0755')
-          .with_content(%r{forgeapi\.puppet\.com/v3/modules})
+          .with_content(%r{forgeapi\.puppet\.com})
+          .with_content(%r{/v3/releases\?module=})
+          .with_content(%r{date,module,version,downloads,delta})
+          .with_content(%r{jq -r})
           .with_content(%r{"puppetlabs-influxdb"})
       end
 
@@ -45,7 +50,7 @@ describe 'forge_scrape_plot::scrape' do
 
         it 'renders the custom values into the script' do
           is_expected.to contain_file('/usr/local/bin/forge_plot.sh')
-            .with_content(%r{scrape_dir="/opt/forge"})
+            .with_content(%r{SCRAPE_DIR="/opt/forge"})
             .with_content(%r{"puppetlabs-stdlib"})
         end
       end
