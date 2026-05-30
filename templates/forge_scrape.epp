@@ -1,12 +1,23 @@
-
-   
+<%- | Array[String[1]] $modules, String[1] $scrape_dir | -%>
 #!/bin/bash
+# Managed by Puppet (forge_scrape_plot::scrape) - do not edit.
+#
+# For each module, fetch its total download count from the Puppet Forge API
+# and append "<date>,<downloads>" to <scrape_dir>/<module>.csv.
 
-for module in <%= $forge_scrape_plot::scrape::modules %>
+set -euo pipefail
 
-do
-	
-echo $(date)","$(curl -s https://forgeapi.puppet.com/v3/releases?module=$module | grep  "downloads"  | awk '/version/ { printf("%s\t", $0); next } 1' |  sed 's/[^0-9]*//g'  | awk '{s+=$1} END {print s}') >> /home/centos/$module.csv
+scrape_dir="<%= $scrape_dir %>"
+mkdir -p "${scrape_dir}"
 
+modules=(<% $modules.each |$m| { -%>
+  "<%= $m %>"
+<% } -%>
+)
+
+for module in "${modules[@]}"; do
+  downloads=$(curl -fsS "https://forgeapi.puppet.com/v3/modules/${module}" \
+    | grep -m1 '"downloads"' \
+    | grep -oE '[0-9]+')
+  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ),${downloads:-0}" >> "${scrape_dir}/${module}.csv"
 done
-
